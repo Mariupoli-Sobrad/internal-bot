@@ -1,7 +1,7 @@
 import requests
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Union
+from typing import Dict, List
 
 
 @dataclass
@@ -37,14 +37,14 @@ def __get_users(data) -> Dict[str, List[str]]:
     for res in data['results']:
         props = res['properties']
         username = props['Telegram']['url']
-        tags = list(map(lambda x: x['id'], props['Tags']['relation']))
+        tags = [x['id'] for x in props['Tags']['relation']]
 
         users[username] = tags
 
     return users
 
 
-def __get_channels(data) -> Dict[str, Channel] :
+def __get_channels(data) -> Dict[str, Channel]:
     channels: Dict[str, Channel] = {}
 
     for res in data['results']:
@@ -57,7 +57,7 @@ def __get_channels(data) -> Dict[str, Channel] :
     return channels
 
 
-def get_channels(username: str) -> Union[List[Channel], None]:
+def get_channels(username: str) -> List[Channel]:
     user_data = __read_database(PEOPLE_DB_ID, HEADERS)
     channel_data = __read_database(CHANNELS_DB_ID, HEADERS)
 
@@ -66,9 +66,9 @@ def get_channels(username: str) -> Union[List[Channel], None]:
 
     user_channels = users.get("@" + username)
     if user_channels is None:
-        return None
+        return []
 
-    return list(map(lambda channel_entry_id: channels[channel_entry_id], user_channels))
+    return [channels[channel_entry_id] for channel_entry_id in user_channels]
 
 
 

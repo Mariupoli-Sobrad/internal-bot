@@ -12,7 +12,6 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Mess
 
 from notion_helper import get_channels
 
-
 CHOOSE_CHANNEL_PREFIX = "choose_channel:"
 
 CHOOSE_CHANNEL, WRITE_YOUR_REQUEST = range(2)
@@ -26,25 +25,27 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def show_my_channels(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Shows all user's channels with invite links."""
     channels = get_channels(update.message.from_user.username)
+    context.user_data['channels'] = channels
 
     if len(channels) == 0:
         await update.message.reply_text("У вас пока нет доступов к каналам")
     else:
-        channel_names = list(map(lambda x: f'\n<a href="{x.url}">{x.name}</a>', channels))
+        channel_names = [f'\n<a href="{c.url}">{c.name}</a>' for c in channels]
         await update.message.reply_text("Доступные вам каналы:" + ''.join(channel_names), parse_mode='HTML')
 
 
 async def choose_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Sends a message with channel options."""
     channels = get_channels(update.message.from_user.username)
+    context.user_data['channel_urls'] = {c.id: c.url for c in channels}
 
     if len(channels) == 0:
         await update.message.reply_text("Вы пока не можете постить запросы в каналы")
         return -1
     else:
-        keyboard = list(
-            map(lambda x: [InlineKeyboardButton(f'{x.name}', callback_data=CHOOSE_CHANNEL_PREFIX + str(x.id))], channels)
-        )
+        keyboard = [
+            [InlineKeyboardButton(f'{c.name}', callback_data=CHOOSE_CHANNEL_PREFIX + str(c.id))]
+            for c in channels]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("Выберите канал для отправки запроса:", reply_markup=reply_markup)
@@ -58,9 +59,14 @@ async def write_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     channel_id = query.data[len(CHOOSE_CHANNEL_PREFIX):]
     context.user_data['channel_entry_id'] = channel_id
-    # TODO: get channel info from channel_id: https://core.telegram.org/method/channels.getFullChannel
+    channel_info = await context.bot.getChat(chat_id=channel_id)
+    print(context.user_data)
+    channel_url = context.user_data['channel_urls'][int(channel_id)]
 
-    await query.edit_message_text(text=f"Напишите свой запрос в канал {channel_id}")
+    await query.edit_message_text(
+        text=f'Напечатайте запрос, который вы хотите отправить в канал '
+             f'\n<a href="{channel_url}">{channel_info.title}</a>',
+        parse_mode="HTML")
 
     return WRITE_YOUR_REQUEST
 
