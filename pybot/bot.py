@@ -60,7 +60,6 @@ async def write_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     channel_id = query.data[len(CHOOSE_CHANNEL_PREFIX):]
     context.user_data['channel_entry_id'] = channel_id
     channel_info = await context.bot.getChat(chat_id=channel_id)
-    print(context.user_data)
     channel_url = context.user_data['channel_urls'][int(channel_id)]
 
     await query.edit_message_text(

@@ -2,7 +2,7 @@ import requests
 import os
 from dataclasses import dataclass
 from typing import Dict, List
-
+from cachetools import cached, TTLCache
 
 @dataclass
 class Channel:
@@ -15,14 +15,15 @@ TOKEN = os.getenv('NOTION_KEY')
 PEOPLE_DB_ID = os.getenv('PEOPLE_DATABASE_ID')
 CHANNELS_DB_ID = os.getenv('CHANNEL_DATABASE_ID')
 
-HEADERS = {
-    "Authorization": "Bearer " + TOKEN,
-    "Content-Type": "application/json",
-    "Notion-Version": "2021-08-16"
-}
 
+@cached(cache=TTLCache(maxsize=2, ttl=600))
+def __read_database(database_id):
+    headers = {
+        "Authorization": "Bearer " + TOKEN,
+        "Content-Type": "application/json",
+        "Notion-Version": "2021-08-16"
+    }
 
-def __read_database(database_id, headers):
     read_url = f"https://api.notion.com/v1/databases/{database_id}/query"
 
     res = requests.request("POST", read_url, headers=headers)
@@ -58,8 +59,8 @@ def __get_channels(data) -> Dict[str, Channel]:
 
 
 def get_channels(username: str) -> List[Channel]:
-    user_data = __read_database(PEOPLE_DB_ID, HEADERS)
-    channel_data = __read_database(CHANNELS_DB_ID, HEADERS)
+    user_data = __read_database(PEOPLE_DB_ID)
+    channel_data = __read_database(CHANNELS_DB_ID)
 
     users = __get_users(user_data)
     channels = __get_channels(channel_data)
