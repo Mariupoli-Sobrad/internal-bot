@@ -14,10 +14,12 @@ class Channel:
 TOKEN = os.getenv('NOTION_KEY')
 PEOPLE_DB_ID = os.getenv('PEOPLE_DATABASE_ID')
 CHANNELS_DB_ID = os.getenv('CHANNEL_DATABASE_ID')
+TTL_SECONDS = int(os.getenv('TTL_SECONDS', 600))
 
 
-@cached(cache=TTLCache(maxsize=2, ttl=600))
+@cached(cache=TTLCache(maxsize=2, ttl=TTL_SECONDS))
 def __read_database(database_id):
+    # TODO: add pagination support: https://www.reddit.com/r/Notion/comments/pcro6l/comment/hee0v6l/
     headers = {
         "Authorization": "Bearer " + TOKEN,
         "Content-Type": "application/json",

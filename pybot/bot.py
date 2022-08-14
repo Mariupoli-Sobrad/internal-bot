@@ -5,6 +5,7 @@ import html
 import requests
 import json
 import traceback
+import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, \
@@ -13,8 +14,13 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Mess
 from notion_helper import get_channels
 
 CHOOSE_CHANNEL_PREFIX = "choose_channel:"
-
 CHOOSE_CHANNEL, WRITE_YOUR_REQUEST = range(2)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("bot")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -24,10 +30,15 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def show_my_channels(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Shows all user's channels with invite links."""
-    channels = get_channels(update.message.from_user.username)
+    username = update.message.from_user.username
+    if username is None:
+        await update.message.reply_text("Бот не работает для пользователей без юзернейма")
+
+    channels = get_channels(username)
     context.user_data['channels'] = channels
 
     if len(channels) == 0:
+        logger.info("User %s has 0 channels", username)
         await update.message.reply_text("У вас пока нет доступов к каналам")
     else:
         channel_names = [f'\n<a href="{c.url}">{c.name}</a>' for c in channels]
@@ -36,10 +47,16 @@ async def show_my_channels(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def choose_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Sends a message with channel options."""
-    channels = get_channels(update.message.from_user.username)
+    username = update.message.from_user.username
+    if username is None:
+        await update.message.reply_text("Бот не работает для пользователей без юзернейма")
+        return -1
+
+    channels = get_channels(username)
     context.user_data['channel_urls'] = {c.id: c.url for c in channels}
 
     if len(channels) == 0:
+        logger.info("User %s can't post to channels", username)
         await update.message.reply_text("Вы пока не можете постить запросы в каналы")
         return -1
     else:
@@ -87,7 +104,8 @@ async def post_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # TODO: add logging and notification to dev channel
+    # TODO: add notification to dev channel
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
     tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
     tb_string = "".join(tb_list)
     print(tb_string)
