@@ -1,17 +1,15 @@
 # pylint: disable=unused-argument, wrong-import-position
-import logging
 import os
-import html
-import requests
-import json
 import traceback
 import logging
+from collections import namedtuple
+from typing import List
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, \
     ConversationHandler, ContextTypes, filters
 
-from notion_helper import get_channels
+from notion_helper import get_channels, ChannelType
 
 CHOOSE_CHANNEL_PREFIX = "choose_channel:"
 CHOOSE_CHANNEL, WRITE_YOUR_REQUEST = range(2)
@@ -25,7 +23,7 @@ logger = logging.getLogger("bot")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Displays info on how to use the bot."""
-    await update.message.reply_text("Доступные команды: /start, /help, /my_channels, /post.")
+    await update.message.reply_text("Доступные команды: /start, /help, /my_channels, /post (в следующей версии).")
 
 
 async def show_my_channels(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -37,12 +35,23 @@ async def show_my_channels(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     channels = get_channels(username)
     context.user_data['channels'] = channels
 
+    if channels is None:
+        logger.info("User %s is not found in the db", username)
+        await update.message.reply_text("Вас нет в нашей базе данных")
     if len(channels) == 0:
         logger.info("User %s has 0 channels", username)
         await update.message.reply_text("У вас пока нет доступов к каналам")
     else:
-        channel_names = [f'\n<a href="{c.url}">{c.name}</a>' for c in channels]
-        await update.message.reply_text("Доступные вам каналы:" + ''.join(channel_names), parse_mode='HTML')
+        ChannelStr = namedtuple('ChannelStr', ['string', 'type'])
+        channel_strings: List[ChannelStr] = \
+            [ChannelStr(
+                string=f'{c.icon or ""}<a href="{c.url}">{c.name}</a> {"— " + c.description if c.description else ""}',
+                type=c.type
+            ) for c in channels]
+        await update.message.reply_text(
+            "<b>Чаты:</b>\n\n" + '\n\n'.join([c.string for c in channel_strings if c.type == ChannelType.CHAT]) + '\n\n' +
+            "<b>Каналы:</b>\n\n" + '\n\n'.join([c.string for c in channel_strings if c.type == ChannelType.CHANNEL]),
+            parse_mode='HTML')
 
 
 async def choose_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -55,7 +64,7 @@ async def choose_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     channels = get_channels(username)
     context.user_data['channel_urls'] = {c.id: c.url for c in channels}
 
-    if len(channels) == 0:
+    if (channels is None) or (len(channels) == 0):
         logger.info("User %s can't post to channels", username)
         await update.message.reply_text("Вы пока не можете постить запросы в каналы")
         return -1
@@ -123,7 +132,7 @@ def main() -> None:
             CommandHandler("start", help_command),
             CommandHandler("help", help_command),
             CommandHandler("my_channels", show_my_channels),
-            CommandHandler("post", choose_channel),
+            # CommandHandler("post", choose_channel),
         ],
         states={
             CHOOSE_CHANNEL: [
@@ -137,7 +146,7 @@ def main() -> None:
             CommandHandler("start", help_command),
             CommandHandler("help", help_command),
             CommandHandler("my_channels", show_my_channels),
-            CommandHandler("post", choose_channel),
+            # CommandHandler("post", choose_channel),
             MessageHandler(msg_filter, help_command)
         ]
     )
