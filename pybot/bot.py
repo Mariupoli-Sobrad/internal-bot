@@ -62,8 +62,8 @@ async def choose_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Бот не работает для пользователей без юзернейма")
         return -1
 
-    channels = get_channels(username)
-    context.user_data['user_channels_to_post'] = {c.id: c for c in channels if c.id is not None}
+    channels = [c for c in get_channels(username) if c.id is not None]
+    context.user_data['user_channels_to_post'] = {c.id: c for c in channels}
 
     if (channels is None) or (len(channels) == 0):
         logger.info("User %s can't post to channels", username)
