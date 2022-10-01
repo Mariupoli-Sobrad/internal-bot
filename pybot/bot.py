@@ -85,9 +85,11 @@ async def write_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     query = update.callback_query
     await query.answer()
 
+    print(context.user_data)
+
     channel_id = query.data[len(CHOOSE_CHANNEL_PREFIX):]
     context.user_data['channel_entry_id'] = channel_id
-    channel = context.user_data['user_channels_to_post'][int(channel_id)]
+    channel = context.user_data['user_channels_to_post'][channel_id]
 
     await query.edit_message_text(
         text=f'Напечатайте запрос, который вы хотите отправить в канал '
@@ -112,10 +114,10 @@ async def post_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     username = update.message.from_user.username
 
     try:
-        await _post_to_channel('-' + context.bot, channel_id, username, channel_text)
+        await _post_to_channel(context.bot, '-' + channel_id, username, channel_text)
     except TelegramError:
         try:
-            await _post_to_channel('-100' + context.bot, channel_id, username, channel_text)
+            await _post_to_channel(context.bot, '-100' + channel_id, username, channel_text)
         except TelegramError:
             logger.error("User %s couldn't post to channel %s", username, channel_id, exc_info=True)
             await update.message.reply_text("При отправке запроса возникла ошибка")

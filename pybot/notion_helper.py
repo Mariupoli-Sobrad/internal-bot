@@ -14,7 +14,7 @@ class ChannelType(Enum):
 
 @dataclass
 class Channel:
-    id: int | None
+    id: str | None
     url: str
     name: str
     icon: str | None
