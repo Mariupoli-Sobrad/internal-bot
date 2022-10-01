@@ -85,8 +85,6 @@ async def write_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     query = update.callback_query
     await query.answer()
 
-    print(context.user_data)
-
     channel_id = query.data[len(CHOOSE_CHANNEL_PREFIX):]
     context.user_data['channel_entry_id'] = channel_id
     channel = context.user_data['user_channels_to_post'][channel_id]
