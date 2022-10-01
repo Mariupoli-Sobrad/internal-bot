@@ -14,7 +14,7 @@ class ChannelType(Enum):
 
 @dataclass
 class Channel:
-    # id: int
+    id: int | None
     url: str
     name: str
     icon: str | None
@@ -81,35 +81,70 @@ def __read_database_with_query(read_url, headers, query=None) -> (List[Any], str
     return data['results'], data['next_cursor']
 
 
+def __get_entries(properties: Dict[Any, Any], property_name: str) -> List[Any]:
+    property_type = properties[property_name]['type']
+    entries = properties[property_name][property_type]
+
+    return entries
+
+
+def __get_text_content(properties: Dict[Any, Any], property_name: str) -> str | None:
+    entries = __get_entries(properties, property_name)
+    if len(entries) == 0:
+        return None
+
+    return entries[0]['text']['content']
+
+
+def __get_url(properties: Dict[Any, Any], property_name: str) -> str | None:
+    entries = __get_entries(properties, property_name)
+    if len(entries) == 0:
+        return None
+
+    return entries[0]['href']
+
+
+def __get_multi_select_tags(properties: Dict[Any, Any], property_name: str) -> List[str]:
+    entries = __get_entries(properties, property_name)
+    return [x['name'] for x in entries]
+
+
+def __get_icon_emoji(result: Dict[Any, Any]) -> str | None:
+    icon_entry = result.get('icon')
+    if icon_entry is None:
+        return None
+
+    return icon_entry['emoji']
+
+
 def __get_user_tags(user_info: Dict[Any, Any]) -> List[str]:
     props = user_info['properties']
-    tags = list(map(lambda x: x['name'], props['Tags']['multi_select']))
-    return tags
+    return __get_multi_select_tags(props, 'Tags')
 
 
 def __get_channels(results: List[Any]) -> List[Channel]:
     channels: List[Channel] = []
 
     for res in results:
-        url = res['properties']['Link']['rich_text'][0]['href']
-        icon_entry = res.get('icon')
-        if icon_entry is not None:
-            icon = icon_entry['emoji']
-        else:
-            icon = None
-        name = res['properties']['Name']['title'][0]['text']['content']
-        description_text = res['properties']['Description']['rich_text']
-        channel_type = res['properties']['Format']['multi_select'][0]['name']
-        tags = [tag['name'] for tag in res['properties']['Tags']['multi_select']]
+        properties = res['properties']
 
-        description = None
-        if len(description_text) > 0:
-            description = description_text[0]['text']['content']
+        url = __get_url(properties, 'Link')
+        name = __get_text_content(properties, 'Name')
+        if (url is None) or (name is None):
+            continue
+
+        icon = __get_icon_emoji(res)
+
+        id = __get_text_content(properties, 'channel_id')
+
+        tags = __get_multi_select_tags(properties, 'Tags')
+        channel_type = __get_multi_select_tags(properties, 'Format')[0]
+        description = __get_text_content(properties, 'Description')
 
         if channel_type == 'Chat':
-            channels.append(Channel(url, name, icon, ChannelType.CHAT, description, tags))
+            channels.append(Channel(id, url, name, icon, ChannelType.CHAT, description, tags))
         elif channel_type == 'Channel':
-            channels.append(Channel(url, name, icon, ChannelType.CHANNEL, description, tags))
+            channels.append(Channel(id, url, name, icon, ChannelType.CHANNEL, description, tags))
 
     return channels
 

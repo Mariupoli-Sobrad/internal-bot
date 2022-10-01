@@ -5,9 +5,10 @@ import logging
 from collections import namedtuple
 from typing import List
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, Bot
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, \
     ConversationHandler, ContextTypes, filters
+from telegram.error import TelegramError
 
 from notion_helper import get_channels, ChannelType
 
@@ -23,7 +24,7 @@ logger = logging.getLogger("bot")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Displays info on how to use the bot."""
-    await update.message.reply_text("Доступные команды: /start, /help, /my_channels, /post (в следующей версии).")
+    await update.message.reply_text("Доступные команды: /start, /help, /my_channels, /post.")
 
 
 async def show_my_channels(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -62,7 +63,7 @@ async def choose_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return -1
 
     channels = get_channels(username)
-    context.user_data['channel_urls'] = {c.id: c.url for c in channels}
+    context.user_data['user_channels_to_post'] = {c.id: c for c in channels if c.id is not None}
 
     if (channels is None) or (len(channels) == 0):
         logger.info("User %s can't post to channels", username)
@@ -71,7 +72,8 @@ async def choose_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         keyboard = [
             [InlineKeyboardButton(f'{c.name}', callback_data=CHOOSE_CHANNEL_PREFIX + str(c.id))]
-            for c in channels]
+            for c in channels
+        ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("Выберите канал для отправки запроса:", reply_markup=reply_markup)
@@ -85,30 +87,41 @@ async def write_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     channel_id = query.data[len(CHOOSE_CHANNEL_PREFIX):]
     context.user_data['channel_entry_id'] = channel_id
-    channel_info = await context.bot.getChat(chat_id=channel_id)
-    channel_url = context.user_data['channel_urls'][int(channel_id)]
+    channel = context.user_data['user_channels_to_post'][int(channel_id)]
 
     await query.edit_message_text(
         text=f'Напечатайте запрос, который вы хотите отправить в канал '
-             f'\n<a href="{channel_url}">{channel_info.title}</a>',
+             f'\n<a href="{channel.url}">{channel.name}</a>',
         parse_mode="HTML")
 
     return WRITE_YOUR_REQUEST
 
 
-async def post_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    channel_id = context.user_data['channel_entry_id']
-    channel_text = update.message.text
-
-    await context.bot.send_message(
+async def _post_to_channel(bot: Bot, channel_id: int, username: str, text: str) -> None:
+    await bot.send_message(
         channel_id,
-        f'Запрос от @{update.message.from_user.username}' + '\n\n' + channel_text,
+        f'Запрос от @{username}' + '\n\n' + text,
         parse_mode='HTML',
         disable_web_page_preview=True,
     )
 
-    await update.message.reply_text("Ваш запрос отправлен в канал")
 
+async def post_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    channel_id = context.user_data['channel_entry_id']
+    channel_text = update.message.text
+    username = update.message.from_user.username
+
+    try:
+        await _post_to_channel('-' + context.bot, channel_id, username, channel_text)
+    except TelegramError:
+        try:
+            await _post_to_channel('-100' + context.bot, channel_id, username, channel_text)
+        except TelegramError:
+            logger.error("User %s couldn't post to channel %s", username, channel_id, exc_info=True)
+            await update.message.reply_text("При отправке запроса возникла ошибка")
+            return -1
+
+    await update.message.reply_text("Ваш запрос отправлен в канал")
     return -1
 
 
@@ -132,7 +145,7 @@ def main() -> None:
             CommandHandler("start", help_command),
             CommandHandler("help", help_command),
             CommandHandler("my_channels", show_my_channels),
-            # CommandHandler("post", choose_channel),
+            CommandHandler("post", choose_channel),
         ],
         states={
             CHOOSE_CHANNEL: [
@@ -146,7 +159,7 @@ def main() -> None:
             CommandHandler("start", help_command),
             CommandHandler("help", help_command),
             CommandHandler("my_channels", show_my_channels),
-            # CommandHandler("post", choose_channel),
+            CommandHandler("post", choose_channel),
             MessageHandler(msg_filter, help_command)
         ]
     )
